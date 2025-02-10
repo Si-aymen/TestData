@@ -1,25 +1,36 @@
 import os
 import re
 import shutil
+import pandas as pd
+from mapping import extract_flux_sheet_names, flux_mapping,renamed_flux_sheets
 
-# Define regex pattern for filenames
 FILENAME_PATTERN = re.compile(
-    r'(?:(?:ENT-(?:[1-9]|[1][0-9]|[2][0-9]|30))_)?'  # Optional ENT-<number>_
-    r'OCIANE_RC2_\d+_[A-Z_]+(?:_[A-Z]+)?'            # Match OCIANE_RC2_<number>_<uppercase_words>
-    r'(?:_Q|_M)'                                      # Ensure it contains _Q or _M
-    r'(?:_\d{8}){0,2}\.csv$'                         # Match optional _YYYYMMDD dates (0, 1, or 2 times) and .csv
+    r'(?:(?:ENT-(?:[1-9]|[1][0-9]|[2][0-9]|30))_)?'   # Optional ENT-<number>_
+    r'(?:MOD1_)?'                                      # Optional MOD1 part
+    r'OCIANE_RC2_\d+_([A-Z_]+(?:_[A-Z_]+)*)(?:_F)?'      # Flux name and optional '_F' suffix
+    r'_(Q|M)'                                          # Ensure it contains _Q or _M
+    r'(?:_\d{8}){1,4}'                                 # Match 1 to 4 date segments (8 digits each)
+    r'\.csv$'                                          # Strictly enforce .csv extension at the end
 )
+
 
 # Directories
 TEST_DIR = "data"
 Q_DIR = os.path.join(TEST_DIR, "Q_FILES")  # Folder for _Q files
 M_DIR = os.path.join(TEST_DIR, "M_FILES")  # Folder for _M files
 NO_MATCH_DIR = os.path.join(TEST_DIR, "NO_MATCH")
+file_path = "Cahier des charges - Reporting Flux Standard - V25.1.0 1.xlsx"
+
 
 # Ensure necessary directories exist
 os.makedirs(Q_DIR, exist_ok=True)
 os.makedirs(M_DIR, exist_ok=True)
 os.makedirs(NO_MATCH_DIR, exist_ok=True)
+
+# Liste des noms de flux renommés
+sheets = pd.read_excel(file_path, sheet_name=None)
+flux_sheets = extract_flux_sheet_names(sheets)  
+renamed_flux_sheets = {flux_mapping.get(flux, flux) for flux in flux_sheets}  # Utilisation d'un set pour recherche rapide
 
 # Function to get the ENT number from a filename
 def get_ent_number(filename):
@@ -29,9 +40,7 @@ def get_ent_number(filename):
 # Function to get the destination directory based on ENT number
 def get_ent_directory(base_dir, filename):
     ent_number = get_ent_number(filename)
-    if ent_number:
-        return os.path.join(base_dir, f"ENT{ent_number}")
-    return os.path.join(base_dir, "NO_ENT")  # Default for non-ENT files
+    return os.path.join(base_dir, f"ENT{ent_number}") if ent_number else os.path.join(base_dir, "NO_ENT")
 
 # File classification logic
 for filename in os.listdir(TEST_DIR):
@@ -41,29 +50,27 @@ for filename in os.listdir(TEST_DIR):
     if not os.path.isfile(file_path):
         continue
 
-    ent_number = get_ent_number(filename)
-
-    # Step 1: Check if the filename contains "_Q" or "_M"
-    if "_Q" in filename:
-        dest_dir = get_ent_directory(Q_DIR, filename)  # Place in Q_FILES/ENT<number>
-        os.makedirs(dest_dir, exist_ok=True)
-        shutil.move(file_path, os.path.join(dest_dir, filename))
-        print(f"Filename '{filename}' contains '_Q' and was moved to '{dest_dir}' folder.")
-
-    elif "_M" in filename:
-        dest_dir = get_ent_directory(M_DIR, filename)  # Place in M_FILES/ENT<number>
-        os.makedirs(dest_dir, exist_ok=True)
-        shutil.move(file_path, os.path.join(dest_dir, filename))
-        print(f"Filename '{filename}' contains '_M' and was moved to '{dest_dir}' folder.")
-
-    # Step 2: If it starts with "ENT-", move to respective ENT folder in TEST_DIR
-    elif ent_number and FILENAME_PATTERN.match(filename):
-        dest_dir = get_ent_directory(TEST_DIR, filename)
-        os.makedirs(dest_dir, exist_ok=True)
-        shutil.move(file_path, os.path.join(dest_dir, filename))
-        print(f"Filename '{filename}' was moved to '{dest_dir}' folder.")
-
-    # Step 3: If it does not match any pattern, move to NO_MATCH
-    else:
+    # Step 1: Validate filename with regex pattern
+    match = FILENAME_PATTERN.match(filename)
+    if not match:
         shutil.move(file_path, os.path.join(NO_MATCH_DIR, filename))
-        print(f"Filename '{filename}' does not match the pattern and was moved to 'NO_MATCH' folder.")
+        print(f"❌ Filename '{filename}' does not match the pattern and was moved to 'NO_MATCH' folder.")
+        continue  # Skip invalid files
+
+    # Step 2: Extract the flux name and check if it is in renamed_flux_sheets
+    flux_name, period = match.groups()
+    flux_name = flux_name.strip()  # Remove accidental spaces
+
+    print(f"🔍 Extracted flux: {flux_name}, Period: {period}")
+    #print("\n\n\nFlux name after change : ",renamed_flux_sheets)
+
+    if flux_name not in renamed_flux_sheets:
+        shutil.move(file_path, os.path.join(NO_MATCH_DIR, filename))
+        print(f"❌ Filename '{filename}' contains unknown flux '{flux_name}' and was moved to 'NO_MATCH' folder.")
+        continue
+
+    # Step 3: Check if the filename contains "_Q" or "_M" and classify
+    dest_dir = get_ent_directory(Q_DIR if period == "Q" else M_DIR, filename)
+    os.makedirs(dest_dir, exist_ok=True)
+    shutil.move(file_path, os.path.join(dest_dir, filename))
+    print(f"✅ Filename '{filename}' was moved to '{dest_dir}' folder.")
