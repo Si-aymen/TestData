@@ -26,7 +26,7 @@ def extract_mandatory_columns(df):
         return mandatory_columns
 
     # Vérifier les noms des colonnes pour s'assurer de leur position
-    print(f"📌 Colonnes détectées : {list(df.columns)}")
+    #print(f"📌 Colonnes détectées : {list(df.columns)}")
 
     try:
         # Supposons que la colonne "Obligatoire" est en position 3 et le nom en position 2

@@ -4,7 +4,7 @@ import re
 from mapping import extract_mandatory_columns 
 
 # Définition du dossier contenant les fichiers CSV
-DATA_DIR = "data/ENT1"
+DATA_DIR = "data/M_FILES/ENT1"
 
 # Charger le fichier Excel contenant les cahiers des charges
 try:
