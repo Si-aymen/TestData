@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import json
+import re  # Ajout de l'import manquant
 
 # Vérifier si le fichier existe avant de continuer
 file_path = "Cahier des charges - Reporting Flux Standard - V25.1.0 1.xlsx"
@@ -9,12 +10,8 @@ if not os.path.exists(file_path):
     exit()
 
 def extract_flux_sheet_names(sheets):
-    """Retourne une liste des noms de feuilles contenant au moins une colonne avec 'Flux'."""
-    flux_sheet_names = []
-    for sheet_name, df in sheets.items():
-        if any('Flux' in str(column) for column in df.columns):  # Assurer que column est bien une string
-            flux_sheet_names.append(sheet_name)
-    return flux_sheet_names
+    """Retourne une liste de tous les noms de feuilles."""
+    return list(sheets.keys())
 
 flux_mapping = {
     "ENCAISSEMENTS": "ENCAISSEMENTS", 
@@ -45,15 +42,14 @@ sheets = pd.read_excel(file_path, sheet_name=None)
 
 # Extraire les noms des feuilles pertinentes
 flux_sheets = extract_flux_sheet_names(sheets)
-#print("Flux names :", flux_sheets)
+
 # Appliquer le mapping pour renommer les flux
-renamed_flux_sheets = [flux_mapping.get(flux, flux) for flux in flux_sheets]
+renamed_flux_sheets = {flux_mapping.get(flux, flux) for flux in flux_sheets}
 
 # Afficher le résultat
-renamed_flux_sheets = {flux_mapping.get(flux, flux) for flux in flux_sheets}  
-print("📌 Flux Sheets (avant mapping) :", flux_sheets)
-print("🔄 Mapping des flux :", flux_mapping)
-print("✅ Flux après mapping :", renamed_flux_sheets)
+print("\n📌 Flux Sheets (avant mapping) :", flux_sheets)
+#print("\n🔄 Mapping des flux :", flux_mapping)
+print("\n✅ Flux après mapping :", renamed_flux_sheets)
 
 # Filtrer uniquement les flux qui existent dans le mapping
 filtered_mapping = {flux: flux_mapping[flux] for flux in flux_sheets if flux in flux_mapping}
@@ -72,12 +68,15 @@ def extract_mandatory_columns(df):
         return mandatory_columns
 
     # Affichage des colonnes pour debug
-    print(f"📌 Colonnes détectées : {list(df.columns)}")
+    print(f"\n📌 Colonnes détectées : {list(df.columns)}")
 
     try:
         # Supposons que la colonne "Obligatoire" est en position 3 et le nom en position 2
-        for _, (column_name, mandatory) in df.iloc[3:, [2, 3]].iterrows():
-            if str(mandatory).strip().lower() == "oui":
+        for _, row in df.iloc[3:].iterrows():
+            column_name = row.iloc[2]  # Nom de la colonne
+            mandatory = row.iloc[3]  # Valeur "Oui" ou autre
+
+            if isinstance(mandatory, str) and mandatory.strip().lower() == "oui":
                 mandatory_columns.append(column_name.strip())
 
     except Exception as e:
@@ -92,3 +91,26 @@ if "ENCAISSEMENTS" in sheets:
     print("\n✅ Colonnes obligatoires extraites :", mandatory_cols)
 else:
     print("⚠️ La feuille 'ENCAISSEMENTS' n'existe pas dans le fichier Excel.")
+
+def load_naming_constraints(notices_file, sheet_name="Notice"):
+    """Charge les contraintes de nommage depuis la feuille 'Notice'."""
+    try:
+        df = pd.read_excel(notices_file, sheet_name=sheet_name)
+
+        if df.shape[0] < 12 or df.shape[1] < 2:
+            raise ValueError("La feuille 'Notice' ne contient pas suffisamment de données.")
+
+        df = df.iloc[11:, [1]].dropna()
+
+        naming_constraints = {}
+        for file_name in df.iloc[:, 0]:
+            simplified_name = extract_simplified_filename(file_name)
+            if simplified_name:
+                naming_constraints[file_name] = simplified_name
+
+        return naming_constraints
+
+    except FileNotFoundError:
+        print(f"❌ Erreur : Le fichier '{notices_file}' n'existe pas.")
+        return {}
+

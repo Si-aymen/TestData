@@ -2,17 +2,17 @@ import os
 import re
 import shutil
 import pandas as pd
-from mapping import extract_flux_sheet_names, flux_mapping,renamed_flux_sheets
+from mapping import extract_flux_sheet_names, flux_mapping, renamed_flux_sheets
+from Notice_ext import load_naming_constraints
 
 FILENAME_PATTERN = re.compile(
     r'(?:(?:ENT-(?:[1-9]|[1][0-9]|[2][0-9]|30))_)?'   # Optional ENT-<number>_
     r'(?:MOD1_)?'                                      # Optional MOD1 part
-    r'OCIANE_RC2_\d+_([A-Z_]+(?:_[A-Z_]+)*)(?:_F)?'      # Flux name and optional '_F' suffix
+    r'OCIANE_RC2_\d+_([A-Z_]+(?:_[A-Z_]+)*)(?:_F)?'    # Flux name and optional '_F' suffix
     r'_(Q|M)'                                          # Ensure it contains _Q or _M
-    r'(?:_\d{8}){1,4}'                                 # Match 1 to 4 date segments (8 digits each)
-    r'\.csv$'                                          # Strictly enforce .csv extension at the end
+    r'(?:_\d{8}){1,4}'                                # Match 1 to 4 date segments (8 digits each)
+    r'\.csv$'                                         # Strictly enforce .csv extension at the end
 )
-
 
 # Directories
 TEST_DIR = "data"
@@ -20,7 +20,6 @@ Q_DIR = os.path.join(TEST_DIR, "Q_FILES")  # Folder for _Q files
 M_DIR = os.path.join(TEST_DIR, "M_FILES")  # Folder for _M files
 NO_MATCH_DIR = os.path.join(TEST_DIR, "NO_MATCH")
 file_path = "Cahier des charges - Reporting Flux Standard - V25.1.0 1.xlsx"
-
 
 # Ensure necessary directories exist
 os.makedirs(Q_DIR, exist_ok=True)
@@ -31,6 +30,8 @@ os.makedirs(NO_MATCH_DIR, exist_ok=True)
 sheets = pd.read_excel(file_path, sheet_name=None)
 flux_sheets = extract_flux_sheet_names(sheets)  
 renamed_flux_sheets = {flux_mapping.get(flux, flux) for flux in flux_sheets}  # Utilisation d'un set pour recherche rapide
+Notice_constraints = load_naming_constraints(file_path)
+Notice_name = set(Notice_constraints.values()) if isinstance(Notice_constraints, dict) else set(Notice_constraints)  # Conversion en set pour comparaison rapide
 
 # Function to get the ENT number from a filename
 def get_ent_number(filename):
@@ -57,16 +58,15 @@ for filename in os.listdir(TEST_DIR):
         print(f"❌ Filename '{filename}' does not match the pattern and was moved to 'NO_MATCH' folder.")
         continue  # Skip invalid files
 
-    # Step 2: Extract the flux name and check if it is in renamed_flux_sheets
+    # Step 2: Extract the flux name and check if it is in both renamed_flux_sheets and Notice_name
     flux_name, period = match.groups()
     flux_name = flux_name.strip()  # Remove accidental spaces
 
     print(f"🔍 Extracted flux: {flux_name}, Period: {period}")
-    #print("\n\n\nFlux name after change : ",renamed_flux_sheets)
-
-    if flux_name not in renamed_flux_sheets:
+    
+    if flux_name not in renamed_flux_sheets or flux_name not in Notice_name:
         shutil.move(file_path, os.path.join(NO_MATCH_DIR, filename))
-        print(f"❌ Filename '{filename}' contains unknown flux '{flux_name}' and was moved to 'NO_MATCH' folder.")
+        print(f"❌ Filename '{filename}' contains an unknown flux '{flux_name}' and was moved to 'NO_MATCH' folder.")
         continue
 
     # Step 3: Check if the filename contains "_Q" or "_M" and classify
