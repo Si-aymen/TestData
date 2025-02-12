@@ -1,10 +1,14 @@
 import os
 import pandas as pd
 import re
+import shutil
 from mapping import extract_mandatory_columns 
 
-# Définition du dossier contenant les fichiers CSV
-DATA_DIR = "data/M_FILES/ENT23"
+# Définition des dossiers contenant les fichiers CSV
+DATA_DIRS = ["data/M_FILES", "data/Q_FILES"]
+REPORT_DIR = "data/Mandatory_columns_failure"
+os.makedirs(REPORT_DIR, exist_ok=True)
+report_file_path = os.path.join(REPORT_DIR, "failure_report.txt")
 
 # Charger le fichier Excel contenant les cahiers des charges
 try:
@@ -31,7 +35,7 @@ def get_flux_name_from_filename(filename, flux_names):
             return flux_name
     return None
 
-def check_mandatory_columns(file_path, flux_name):
+def check_mandatory_columns(file_path, flux_name, failed_files):
     """
     Vérifie si le fichier CSV contient toutes les colonnes obligatoires du flux donné et affiche les résultats.
     """
@@ -41,6 +45,8 @@ def check_mandatory_columns(file_path, flux_name):
         df = pd.read_csv(file_path, sep=";", encoding="utf-8", low_memory=False)
     except Exception as e:
         print(f"❌ {file_path} : Erreur lors de la lecture -> {e}")
+        failed_files.append(file_path)
+        shutil.move(file_path, os.path.join(REPORT_DIR, os.path.basename(file_path)))
         return
     
     mandatory_columns = mandatory_columns_by_flux.get(flux_name, [])
@@ -49,27 +55,47 @@ def check_mandatory_columns(file_path, flux_name):
 
     if missing_columns:
         print(f"❌ {file_path} : Colonnes manquantes pour {flux_name} -> {missing_columns}")
+        failed_files.append(file_path)
+        shutil.move(file_path, os.path.join(REPORT_DIR, os.path.basename(file_path)))
     else:
         print(f"✅ {file_path} : Toutes les colonnes obligatoires sont présentes pour {flux_name}")
 
-# Vérifier que le dossier existe
-if not os.path.exists(DATA_DIR):
-    print(f"❌ Le dossier {DATA_DIR} n'existe pas.")
-    exit(1)
+failed_files = []
 
-# Traitement des fichiers CSV dans le dossier
-csv_files = [f for f in os.listdir(DATA_DIR) if f.endswith(".csv")]
-
-if not csv_files:
-    print("⚠️ Aucun fichier CSV trouvé dans le dossier.")
-else:
-    for filename in csv_files:
-        file_path = os.path.join(DATA_DIR, filename)
+# Parcourir les dossiers M_FILES et Q_FILES
+for data_dir in DATA_DIRS:
+    if not os.path.exists(data_dir):
+        print(f"❌ Le dossier {data_dir} n'existe pas.")
+        continue
+    
+    # Parcourir tous les sous-dossiers (ENT folders)
+    for ent_folder in os.listdir(data_dir):
+        ent_path = os.path.join(data_dir, ent_folder)
+        if not os.path.isdir(ent_path):
+            continue  # Ignorer les fichiers qui ne sont pas des dossiers
         
-        # Identifier le flux correspondant
-        flux_name = get_flux_name_from_filename(filename, mandatory_columns_by_flux.keys())
-
-        if flux_name:
-            check_mandatory_columns(file_path, flux_name)
+        csv_files = [f for f in os.listdir(ent_path) if f.endswith(".csv")]
+        
+        if not csv_files:
+            print(f"⚠️ Aucun fichier CSV trouvé dans {ent_path}.")
         else:
-            print(f"⚠️ {file_path} : Aucun flux correspondant trouvé.")
+            for filename in csv_files:
+                file_path = os.path.join(ent_path, filename)
+                
+                # Identifier le flux correspondant
+                flux_name = get_flux_name_from_filename(filename, mandatory_columns_by_flux.keys())
+
+                if flux_name:
+                    check_mandatory_columns(file_path, flux_name, failed_files)
+                else:
+                    print(f"⚠️ {file_path} : Aucun flux correspondant trouvé.")
+                    failed_files.append(file_path)
+                    shutil.move(file_path, os.path.join(REPORT_DIR, os.path.basename(file_path)))
+
+# Exporter le rapport des fichiers échoués
+if failed_files:
+    with open(report_file_path, "w", encoding="utf-8") as report_file:
+        report_file.write("\n".join(failed_files))
+    print(f"📝 Rapport généré : {report_file_path}")
+else:
+    print("✅ Tous les fichiers ont passé les tests.")

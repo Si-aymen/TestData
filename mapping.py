@@ -14,27 +14,14 @@ def extract_flux_sheet_names(sheets):
     return list(sheets.keys())
 
 flux_mapping = {
-    "ENCAISSEMENTS": "ENCAISSEMENTS", 
-    "CONTRATSCOLLECTIFS": "CONTRATCOLLECTIF_STOCK", 
-    "COTISATIONS": "COTISATIONS",
+   
+    "CONTRATSCOLLECTIFS": "CONTRATCOLLECTIF_STOCK",
     "ADHESIONSINDIVIDUELLES": "ADHESIONSINDIVIDUELLES_STOCK",
-    "RELANCES_INDIVIDUELLES": "RELANCES_INDIVIDUELLES",
-    "FAMILLE_ACTES_LIMITE": "FAMILLE_ACTES_LIMITE",
-    "REMISES_RG": "REMISES_RG",
-    "REFERENTIEL_ACTES": "REFERENTIEL_ACTES",
-    "PRESTATIONSANTE": "PRESTATIONSANTE",
-    "PRESTATIONSANTEATTENTE": "PRESTATIONSANTE",
-    "FRANCHISES_FAM_ACTES": "FRANCHISES_FAM_ACTES",
     "REFERENTIEL_FORMULE_REMB": "FORMULES_REMBOURSEMENTS",
     "REFERENTIEL_GROUPES": "REFERENTIEL_GROUPE",
-    "REFERENTIEL_PRODUITS_OPTIONS": "REFERENTIEL_PRODUITS_OPTIONS",
-    "ECRITURE_COMPTA": "ECRITURE_COMPTA",
-    "COMMISSIONS": "COMMISSIONS",
-    "PRESTATIONPREV_SIN": "PRESTATIONPREV_SIN",
-    "PRESTATIONPREV_PERIOD_REMUN": "PRESTATIONPREV_PERIOD_REMUN",
-    "PRESTATIONPREV_BENCAP": "PRESTATIONPREV_BENCAP",
     "DECLARATION_HONORAIRES": "HONORAIRES",
-    "PRESTATIONPREV_REG": "PRESTATIONPREV_REG"
+    "BENEXT":"BENEFICIAIRE_EXTERNE"
+       
 }
 
 # Charger toutes les feuilles du fichier Excel dans un dictionnaire de DataFrames
@@ -68,7 +55,7 @@ def extract_mandatory_columns(df):
         return mandatory_columns
 
     # Affichage des colonnes pour debug
-    print(f"\n📌 Colonnes détectées : {list(df.columns)}")
+    #print(f"\n📌 Colonnes détectées : {list(df.columns)}")
 
     try:
         # Supposons que la colonne "Obligatoire" est en position 3 et le nom en position 2
