@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import re
 import shutil
-from mapping import extract_mandatory_columns 
+from mapping import extract_mandatory_columns,get_entete_csv 
 
 # Définition des dossiers contenant les fichiers CSV
 DATA_DIRS = ["data/M_FILES", "data/Q_FILES"]
@@ -50,7 +50,6 @@ def check_mandatory_columns(file_path, flux_name, failed_files):
         return
     
     mandatory_columns = mandatory_columns_by_flux.get(flux_name, [])
-    
     missing_columns = [col for col in mandatory_columns if col not in df.columns]
 
     if missing_columns:

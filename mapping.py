@@ -45,6 +45,8 @@ filtered_mapping = {flux: flux_mapping[flux] for flux in flux_sheets if flux in 
 #print("\n📌 Mapping des flux correspondants :")
 #print(json.dumps(filtered_mapping, indent=4, ensure_ascii=False))
 
+
+
 def extract_mandatory_columns(df):
     """Retourne une liste des colonnes obligatoires à partir de la feuille de cahier des charges."""
     mandatory_columns = []
@@ -71,10 +73,27 @@ def extract_mandatory_columns(df):
 
     return mandatory_columns
 
+def get_entete_csv(df):
+    """Retourne les valeurs de la colonne C à partir de la 5ᵉ ligne (index 4) jusqu'à la première cellule vide."""
+    try:
+        values = []
+        for value in df.iloc[4:, 2]:  # Parcours de la colonne C à partir de la ligne 5 (index 4)
+            if pd.isna(value) or value == "":  # Arrêter si la cellule est vide
+                break
+            values.append(value)
+        return values
+    except IndexError:
+        print("⚠️ Erreur : La colonne C n'existe pas dans le DataFrame.")
+        return []
+
+
+
 # Vérifier si la feuille "ENCAISSEMENTS" existe avant de la traiter
 if "ENCAISSEMENTS" in sheets:
     df = sheets["ENCAISSEMENTS"]
+    C_column = get_entete_csv(df)
     mandatory_cols = extract_mandatory_columns(df)
+    print("\n✅ Colonnes entete extraites :", C_column)
     print("\n✅ Colonnes obligatoires extraites :", mandatory_cols)
 else:
     print("⚠️ La feuille 'ENCAISSEMENTS' n'existe pas dans le fichier Excel.")
