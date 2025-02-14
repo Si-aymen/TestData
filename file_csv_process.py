@@ -2,6 +2,7 @@ import os
 import pandas as pd
 import shutil
 import logging
+import re
 from mapping import extract_headers_and_types, extract_mandatory_columns, org_flux_sheets
 
 # Configure logging
@@ -67,23 +68,50 @@ def check_mandatory_columns(file_path, flux_name, failed_files):
 
     headers_types = extract_headers_and_types(cahier_des_charges[flux_name])
     length_check_failed = []
+    type_check_failed = []
 
-    for header, _, expected_length in headers_types:
+    for header, expected_type, expected_length in headers_types:
         if header in df.columns:
-            actual_lengths = df[header].astype(str).str.len()
+            actual_values = df[header].astype(str)
+
+            # Check length
             if pd.notna(expected_length) and isinstance(expected_length, (int, float)):
                 expected_length = int(expected_length)
                 max_allowed_length = 10 if expected_length == 8 else expected_length
-                if any(actual_lengths > max_allowed_length):
-                    length_check_failed.append(f"{header} (Attendu max: {max_allowed_length}, Trouvé: {actual_lengths.max()})")
+                if any(actual_values.str.len() > max_allowed_length):
+                    length_check_failed.append(f"{header} (Attendu max: {max_allowed_length}, Trouvé: {actual_values.str.len().max()})")
 
-    if length_check_failed:
-        error_message = f"{file_path} : Erreurs de longueur de données -> {', '.join(length_check_failed)}"
+            # Check type
+            if expected_type == "Numérique":
+                # Ignore null values and check if the value is numeric
+                if not all(actual_values.isnull() | actual_values.str.isnumeric()):
+                    type_check_failed.append(f"{header} : Attendu 'Numérique', trouvé des valeurs non numériques.")
+            elif expected_type == "Alphanumérique":
+                # Adjusting the check for Alphanumérique to allow numbers, letters, and symbols
+                alphanumeric_pattern = re.compile(r'^[\w\W]+$')  # Matches letters, numbers, and symbols
+                if not all(actual_values.str.match(alphanumeric_pattern)):
+                    type_check_failed.append(f"{header} : Attendu 'Alphanumérique', trouvé des valeurs non alphanumériques.")
+            elif expected_type == "Date aaaammjj":
+                try:
+                    pd.to_datetime(actual_values, format='%Y%m%d', errors='raise')
+                except Exception:
+                    type_check_failed.append(f"{header} : Attendu 'Date aaaammjj', format incorrect pour certaines valeurs.")
+    
+    # Combine checks
+    if length_check_failed or type_check_failed:
+        error_message = f"{file_path} : Erreurs -> Longueur: {', '.join(length_check_failed)}, Type: {', '.join(type_check_failed)}"
         logging.error(error_message)
         failed_files.append((file_path, error_message))
         shutil.move(file_path, os.path.join(REPORT_DIR, os.path.basename(file_path)))  # 🚨 Déplacement si échec
+
+        # Add failure details to the failure report
+        with open(report_file_path, "a", encoding="utf-8") as report_file:
+            report_file.write(f"❌ {file_path}\n")
+            report_file.write(f"Raison : Longueur -> {', '.join(length_check_failed)}\n")
+            report_file.write(f"Raison : Type -> {', '.join(type_check_failed)}\n\n")
+        
     else:
-        logging.info("%s \n🆗 : Toutes les colonnes obligatoires et leurs longueurs sont correctes pour %s", file_path, flux_name)
+        logging.info("%s \n🆗 : Toutes les colonnes obligatoires, leurs longueurs et types sont corrects pour %s", file_path, flux_name)
 
 # Traitement des fichiers
 failed_files = []
