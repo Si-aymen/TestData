@@ -86,7 +86,17 @@ def check_mandatory_columns(file_path, flux_name, failed_files):
                 # Ignore null values and check if the value is numeric
                 if not all(actual_values.isnull() | actual_values.str.isnumeric()):
                     type_check_failed.append(f"{header} : Attendu 'Numérique', trouvé des valeurs non numériques.")
+            elif expected_type == "Number":
+                # Ignore null values and check if the value is numeric
+                alphanumeric_pattern = re.compile(r'^[\w\W]+$')  # Matches letters, numbers, and symbols
+                if not all(actual_values.str.match(alphanumeric_pattern)):
+                    type_check_failed.append(f"{header} : Attendu 'Alphanumérique', trouvé des valeurs non alphanumériques.")
             elif expected_type == "Alphanumérique":
+                # Adjusting the check for Alphanumérique to allow numbers, letters, and symbols
+                alphanumeric_pattern = re.compile(r'^[\w\W]+$')  # Matches letters, numbers, and symbols
+                if not all(actual_values.str.match(alphanumeric_pattern)):
+                    type_check_failed.append(f"{header} : Attendu 'Alphanumérique', trouvé des valeurs non alphanumériques.")
+            elif expected_type == "Alpha Numérique":
                 # Adjusting the check for Alphanumérique to allow numbers, letters, and symbols
                 alphanumeric_pattern = re.compile(r'^[\w\W]+$')  # Matches letters, numbers, and symbols
                 if not all(actual_values.str.match(alphanumeric_pattern)):

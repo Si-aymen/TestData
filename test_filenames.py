@@ -7,12 +7,13 @@ from mapping import extract_flux_sheet_names, flux_mapping, renamed_flux_sheets
 from Notice_ext import load_naming_constraints
 
 FILENAME_PATTERN = re.compile(
-    r'(?:(?:ENT-(?:[1-9]|[1-9][0-9]|100))_)?'  # Optional ENT-<number> from 1 to 100
-    r'(?:MOD1_)?'                              # Optional MOD1 part
-    r'OCIANE_RC2_\d+_([A-Z_]+(?:_[A-Z_]+)*)(?:_F)?'  # Flux name and optional '_F' suffix
-    r'_(Q|M)(?:_F)?'                                    # Ensure it contains _Q or _M, and optionally '_F'
-    r'((?:_\d{8}){1,4})'                         # Match 1 to 4 date segments (8 digits each)
-    r'\.csv$'                                    # Strictly enforce .csv extension at the end
+    r'(?:(?:ENT-(?:[1-9]|[1-9][0-9]|100))_)?'  # ENT-<numéro> de 1 à 100 (optionnel)
+    r'(?:MOD1_)?'                              # MOD1 (optionnel)
+    r'OCIANE_RC2_\d+_'                         # Début obligatoire du nom de fichier
+    r'([A-Z_]+(?:_[A-Z_]+)*)'                  # Flux (lettres majuscules et underscores)
+    r'_(Q|M)(?:_[A-Z_]+)?'                     # Période (_Q ou _M) + suffixe optionnel
+    r'((?:_\d{8}){1,4})'                       # Entre 2 et 4 dates (YYYYMMDD) séparées par '_'
+    r'\.csv$'                                  # Doit finir par .csv
 )
 
 # Directories
