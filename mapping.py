@@ -24,6 +24,19 @@ flux_mapping = {
        
 }
 
+reverse_flux_mapping = {
+   
+    "CONTRATCOLLECTIF_STOCK": "CONTRATSCOLLECTIFS",
+    "ADHESIONSINDIVIDUELLES_STOCK": "ADHESIONSINDIVIDUELLES",
+    "FORMULES_REMBOURSEMENTS": "REFERENTIEL_FORMULE_REMB",
+    "REFERENTIEL_GROUPE": "REFERENTIEL_GROUPES",
+    "DECLARATION_HONORAIRES": "HONORAIRES",
+    "BENEFICIAIRE_EXTERNE":"BENEXT"
+       
+}
+
+
+
 # Charger toutes les feuilles du fichier Excel dans un dictionnaire de DataFrames
 sheets = pd.read_excel(file_path, sheet_name=None)
 
@@ -33,10 +46,17 @@ flux_sheets = extract_flux_sheet_names(sheets)
 # Appliquer le mapping pour renommer les flux
 renamed_flux_sheets = {flux_mapping.get(flux, flux) for flux in flux_sheets}
 
+#reverse to org
+org_flux_sheets = {reverse_flux_mapping.get(flux, flux) for flux in flux_sheets}
+
+
 # Afficher le résultat
-print("\n📌 Flux Sheets (avant mapping) :", flux_sheets)
+#print("\n📌 Flux Sheets (avant mapping) :", flux_sheets)
 #print("\n🔄 Mapping des flux :", flux_mapping)
 print("\n✅ Flux après mapping :", renamed_flux_sheets)
+print("\n📌 org des flux :", org_flux_sheets)
+
+
 
 # Filtrer uniquement les flux qui existent dans le mapping
 filtered_mapping = {flux: flux_mapping[flux] for flux in flux_sheets if flux in flux_mapping}
@@ -85,14 +105,43 @@ def get_entete_csv(df):
     except IndexError:
         print("⚠️ Erreur : La colonne C n'existe pas dans le DataFrame.")
         return []
+import pandas as pd
+
+def extract_headers_and_types(df):
+    """
+    Extrait les noms d'entête (colonne C) et les types de données (colonne F) à partir de la 5ᵉ ligne.
+    
+    Args:
+        df (pd.DataFrame): Le dataframe contenant les données.
+    
+    Returns:
+        list: Liste de tuples contenant (Nom de l'entête, Type de données)
+    """
+    headers_types = []
+    
+    # Parcours des lignes à partir de l'index 4 (5ᵉ ligne)
+    for _, row in df.iloc[4:].iterrows():
+        header = row.iloc[2]  # Colonne C
+        data_type = row.iloc[5]  # Colonne F
+        Hlength = row.iloc[6]  # Colonne G
+        
+        if pd.isna(header) or header == "":  # Arrêter si la cellule est vide
+            break
+        
+        headers_types.append((header, data_type,Hlength))
+    
+    return headers_types
+
 
 
 
 # Vérifier si la feuille "ENCAISSEMENTS" existe avant de la traiter
-if "ENCAISSEMENTS" in sheets:
-    df = sheets["ENCAISSEMENTS"]
+if "DECLARATION_HONORAIRES" in sheets:
+    df = sheets["DECLARATION_HONORAIRES"]
+    header = extract_headers_and_types(df)
     C_column = get_entete_csv(df)
     mandatory_cols = extract_mandatory_columns(df)
+    print("\n✅ Colonnes entete type :", header)
     print("\n✅ Colonnes entete extraites :", C_column)
     print("\n✅ Colonnes obligatoires extraites :", mandatory_cols)
 else:

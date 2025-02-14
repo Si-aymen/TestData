@@ -1,106 +1,94 @@
 import os
-import pandas as pd
 import re
 import shutil
-from mapping import extract_mandatory_columns, generate_entete_csv
+import pandas as pd
+from datetime import datetime
+from mapping import extract_flux_sheet_names, flux_mapping, renamed_flux_sheets
+from Notice_ext import load_naming_constraints
 
-# Définition des dossiers contenant les fichiers CSV
-DATA_DIRS = ["data/M_FILES", "data/Q_FILES"]
-REPORT_DIR = "data/Mandatory_columns_failure"
-os.makedirs(REPORT_DIR, exist_ok=True)
-report_file_path = os.path.join(REPORT_DIR, "failure_report.txt")
+FILENAME_PATTERN = re.compile(
+    r'(?:(?:ENT-(?:[1-9]|[1-9][0-9]|100))_)?'  # Optional ENT-<number> from 1 to 100
+    r'(?:MOD1_)?'                              # Optional MOD1 part
+    r'OCIANE_RC2_\d+_([A-Z_]+(?:_[A-Z_]+)*)(?:_F)?'  # Flux name and optional '_F' suffix
+    r'_(Q|M)(?:_F)?'                                    # Ensure it contains _Q or _M, and optionally '_F'
+    r'((?:_\d{8}){1,4})'                         # Match 1 to 4 date segments (8 digits each)
+    r'\.csv$'                                    # Strictly enforce .csv extension at the end
+)
 
-# Charger le fichier Excel contenant les cahiers des charges
-try:
-    cahier_des_charges = pd.read_excel(
-        "Cahier des charges - Reporting Flux Standard - V25.1.0 1.xlsx", 
-        sheet_name=None
-    )
-except Exception as e:
-    print(f"❌ Erreur lors de la lecture du fichier Excel : {e}")
-    exit(1)
+# Directories
+TEST_DIR = "data"
+Q_DIR = os.path.join(TEST_DIR, "Q_FILES")  # Folder for _Q files
+M_DIR = os.path.join(TEST_DIR, "M_FILES")  # Folder for _M files
+NO_MATCH_DIR = os.path.join(TEST_DIR, "NO_MATCH")
+file_path = "Cahier des charges - Reporting Flux Standard - V25.1.0 1.xlsx"
 
-# Extraction des noms des feuilles et de leurs colonnes obligatoires
-mandatory_columns_by_flux = {
-    sheet_name.strip().upper(): extract_mandatory_columns(df) for sheet_name, df in cahier_des_charges.items()
-}
+# Ensure necessary directories exist
+os.makedirs(Q_DIR, exist_ok=True)
+os.makedirs(M_DIR, exist_ok=True)
+os.makedirs(NO_MATCH_DIR, exist_ok=True)
 
-def get_flux_name_from_filename(filename, flux_names):
-    """
-    Extrait le nom du flux à partir du nom de fichier en cherchant une correspondance avec les flux connus.
-    """
-    filename_upper = filename.upper()  # Pour éviter les erreurs de casse
-    for flux_name in flux_names:
-        if flux_name in filename_upper:
-            return flux_name
-    return None
+# Liste des noms de flux renommés
+sheets = pd.read_excel(file_path, sheet_name=None)
+flux_sheets = extract_flux_sheet_names(sheets)  
+renamed_flux_sheets = {flux_mapping.get(flux, flux) for flux in flux_sheets}  # Utilisation d'un set pour recherche rapide
+Notice_constraints = load_naming_constraints(file_path)
+Notice_name = set(Notice_constraints.values()) if isinstance(Notice_constraints, dict) else set(Notice_constraints)  # Conversion en set pour comparaison rapide
 
-def check_mandatory_columns(file_path, flux_name, failed_files):
-    """
-    Vérifie si le fichier CSV contient toutes les colonnes obligatoires du flux donné et affiche les résultats.
-    """
-    print(f"\n📂 Traitement du fichier : {file_path}")
+# Function to get the ENT number from a filename
+def get_ent_number(filename):
+    match = re.match(r'^ENT-(\d+)', filename)
+    return match.group(1) if match else None
 
-    try:
-        df = pd.read_csv(file_path, sep=";", encoding="utf-8", low_memory=False)
-    except Exception as e:
-        print(f"❌ {file_path} : Erreur lors de la lecture -> {e}")
-        failed_files.append(file_path)
-        shutil.move(file_path, os.path.join(REPORT_DIR, os.path.basename(file_path)))
-        return
+# Function to get the destination directory based on ENT number
+def get_ent_directory(base_dir, filename):
+    ent_number = get_ent_number(filename)
+    return os.path.join(base_dir, f"ENT{ent_number}") if ent_number else os.path.join(base_dir, "NO_ENT")
+
+# Function to extract the latest date from the filename
+def extract_latest_date(dates_str):
+    dates = re.findall(r'\d{8}', dates_str)  # Extract all 8-digit dates
+    dates = [datetime.strptime(date, "%Y%m%d") for date in dates]
+    return max(dates).strftime("%Y%m%d") if dates else None
+
+expected_date = None
+
+# File classification logic
+for filename in os.listdir(TEST_DIR):
+    file_path = os.path.join(TEST_DIR, filename)
+
+    # Skip directories, only process files
+    if not os.path.isfile(file_path):
+        continue
+
+    # Step 1: Validate filename with regex pattern
+    match = FILENAME_PATTERN.match(filename)
+    if not match:
+        shutil.move(file_path, os.path.join(NO_MATCH_DIR, filename))
+        print(f"❌ Filename '{filename}' does not match the pattern and was moved to 'NO_MATCH' folder.")
+        continue  # Skip invalid files
+
+    # Step 2: Extract the flux name, period, and dates
+    flux_name, period, dates_str = match.groups()
+    flux_name = flux_name.strip()  # Remove accidental spaces
+    latest_date = extract_latest_date(dates_str)
+
+    print(f"🔍 Extracted flux: {flux_name}, Period: {period}, Latest Date: {latest_date}")
     
-    # Utiliser generate_entete_csv pour extraire l'en-tête
-    extracted_columns = generate_entete_csv(df)
-
-    # Récupérer les colonnes obligatoires du cahier des charges
-    mandatory_columns = mandatory_columns_by_flux.get(flux_name, [])
-
-    missing_columns = [col for col in mandatory_columns if col not in extracted_columns]
-
-    if missing_columns:
-        print(f"❌ {file_path} : Colonnes manquantes pour {flux_name} -> {missing_columns}")
-        failed_files.append(file_path)
-        shutil.move(file_path, os.path.join(REPORT_DIR, os.path.basename(file_path)))
-    else:
-        print(f"✅ {file_path} : Toutes les colonnes obligatoires sont présentes pour {flux_name}")
-
-
-failed_files = []
-
-# Parcourir les dossiers M_FILES et Q_FILES
-for data_dir in DATA_DIRS:
-    if not os.path.exists(data_dir):
-        print(f"❌ Le dossier {data_dir} n'existe pas.")
+    if flux_name not in renamed_flux_sheets or flux_name not in Notice_name:
+        shutil.move(file_path, os.path.join(NO_MATCH_DIR, filename))
+        print(f"❌ Filename '{filename}' contains an unknown flux '{flux_name}' and was moved to 'NO_MATCH' folder.")
         continue
     
-    # Parcourir tous les sous-dossiers (ENT folders)
-    for ent_folder in os.listdir(data_dir):
-        ent_path = os.path.join(data_dir, ent_folder)
-        if not os.path.isdir(ent_path):
-            continue  # Ignorer les fichiers qui ne sont pas des dossiers
-        
-        csv_files = [f for f in os.listdir(ent_path) if f.endswith(".csv")]
-        
-        if not csv_files:
-            print(f"⚠️ Aucun fichier CSV trouvé dans {ent_path}.")
-        else:
-            for filename in csv_files:
-                file_path = os.path.join(ent_path, filename)
-                
-                # Identifier le flux correspondant
-                flux_name = get_flux_name_from_filename(filename, mandatory_columns_by_flux.keys())
+    # Step 3: Validate that all files have the same latest date
+    if expected_date is None:
+        expected_date = latest_date
+    elif latest_date != expected_date:
+        shutil.move(file_path, os.path.join(NO_MATCH_DIR, filename))
+        print(f"❌ Filename '{filename}' has a different date '{latest_date}' (expected '{expected_date}') and was moved to 'NO_MATCH' folder.")
+        continue
 
-                if flux_name:
-                    check_mandatory_columns(file_path, flux_name, failed_files)
-                else:
-                    print(f"⚠️ {file_path} : Aucun flux correspondant trouvé.")
-                    failed_files.append(file_path)
-                    shutil.move(file_path, os.path.join(REPORT_DIR, os.path.basename(file_path)))
-
-# Exporter le rapport des fichiers échoués
-if failed_files:
-    with open(report_file_path, "w", encoding="utf-8") as report_file:
-        report_file.write("\n".join(failed_files))
-    print(f"📝 Rapport généré : {report_file_path}")
-else:
-    print("✅ Tous les fichiers ont passé les tests.")
+    # Step 4: Check if the filename contains "_Q" or "_M" and classify
+    dest_dir = get_ent_directory(Q_DIR if period == "Q" else M_DIR, filename)
+    os.makedirs(dest_dir, exist_ok=True)
+    shutil.move(file_path, os.path.join(dest_dir, filename))
+    print(f"✅ Filename '{filename}' was moved to '{dest_dir}' folder.")
