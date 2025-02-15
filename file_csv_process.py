@@ -3,6 +3,7 @@ import pandas as pd
 import shutil
 import logging
 import re
+import json
 from mapping import extract_headers_and_types, extract_mandatory_columns, org_flux_sheets
 
 # Configure logging
@@ -13,6 +14,7 @@ DATA_DIRS = ["data/M_FILES", "data/Q_FILES"]
 REPORT_DIR = "data/Mandatory_columns_failure"
 os.makedirs(REPORT_DIR, exist_ok=True)
 report_file_path = os.path.join(REPORT_DIR, "failure_report.txt")
+json_report_path = os.path.join(REPORT_DIR, "test_results.json")  # Path for JSON report
 
 # Load the Excel file
 excel_path = "Cahier des charges - Reporting Flux Standard - V25.1.0 1.xlsx"
@@ -42,8 +44,8 @@ def check_mandatory_columns(file_path, flux_name, failed_files):
         df = pd.read_csv(file_path, sep=";", encoding="utf-8", low_memory=False)
         df.columns = df.columns.str.strip()
     except Exception as e:
-        error_message = f"{file_path} : Erreur lors de la lecture -> {e}"
-        logging.error(error_message)
+        error_message = f"Erreur lors de la lecture -> {e}"  # Remove file name from reason
+        logging.error(f"{file_path} : {error_message}")
         failed_files.append((file_path, error_message))
         shutil.move(file_path, os.path.join(REPORT_DIR, os.path.basename(file_path)))  # 🚨 Déplacement si échec
         return  
@@ -60,8 +62,8 @@ def check_mandatory_columns(file_path, flux_name, failed_files):
     missing_columns = [col for col in mandatory_columns if col not in df.columns]
     
     if missing_columns:
-        error_message = f"{file_path} : Colonnes manquantes pour {flux_name} -> {missing_columns}"
-        logging.error(error_message)
+        error_message = f"Colonnes manquantes pour {flux_name} -> {missing_columns}"  # Remove file name from reason
+        logging.error(f"{file_path} : {error_message}")
         failed_files.append((file_path, error_message))
         shutil.move(file_path, os.path.join(REPORT_DIR, os.path.basename(file_path)))  # 🚨 Déplacement si échec
         return
@@ -83,22 +85,11 @@ def check_mandatory_columns(file_path, flux_name, failed_files):
 
             # Check type
             if expected_type == "Numérique":
-                # Ignore null values and check if the value is numeric
                 if not all(actual_values.isnull() | actual_values.str.isnumeric()):
                     type_check_failed.append(f"{header} : Attendu 'Numérique', trouvé des valeurs non numériques.")
-            elif expected_type == "Number":
-                # Ignore null values and check if the value is numeric
-                alphanumeric_pattern = re.compile(r'^[\w\W]+$')  # Matches letters, numbers, and symbols
-                if not all(actual_values.str.match(alphanumeric_pattern)):
-                    type_check_failed.append(f"{header} : Attendu 'Alphanumérique', trouvé des valeurs non alphanumériques.")
-            elif expected_type == "Alphanumérique":
-                # Adjusting the check for Alphanumérique to allow numbers, letters, and symbols
-                alphanumeric_pattern = re.compile(r'^[\w\W]+$')  # Matches letters, numbers, and symbols
-                if not all(actual_values.str.match(alphanumeric_pattern)):
-                    type_check_failed.append(f"{header} : Attendu 'Alphanumérique', trouvé des valeurs non alphanumériques.")
-            elif expected_type == "Alpha Numérique":
-                # Adjusting the check for Alphanumérique to allow numbers, letters, and symbols
-                alphanumeric_pattern = re.compile(r'^[\w\W]+$')  # Matches letters, numbers, and symbols
+            elif expected_type in ["Alphanumérique", "Alpha Numérique"]:
+                # Updated regex to allow spaces, commas, and percentage signs
+                alphanumeric_pattern = re.compile(r'^[a-zA-Z0-9 ,%]+$')  # Allows letters, numbers, spaces, commas, and %
                 if not all(actual_values.str.match(alphanumeric_pattern)):
                     type_check_failed.append(f"{header} : Attendu 'Alphanumérique', trouvé des valeurs non alphanumériques.")
             elif expected_type == "Date aaaammjj":
@@ -109,8 +100,8 @@ def check_mandatory_columns(file_path, flux_name, failed_files):
     
     # Combine checks
     if length_check_failed or type_check_failed:
-        error_message = f"{file_path} : Erreurs -> Longueur: {', '.join(length_check_failed)}, Type: {', '.join(type_check_failed)}"
-        logging.error(error_message)
+        error_message = f"Erreurs -> Longueur: {', '.join(length_check_failed)}, Type: {', '.join(type_check_failed)}"  # Remove file name from reason
+        logging.error(f"{file_path} : {error_message}")
         failed_files.append((file_path, error_message))
         shutil.move(file_path, os.path.join(REPORT_DIR, os.path.basename(file_path)))  # 🚨 Déplacement si échec
 
@@ -122,6 +113,41 @@ def check_mandatory_columns(file_path, flux_name, failed_files):
         
     else:
         logging.info("%s \n🆗 : Toutes les colonnes obligatoires, leurs longueurs et types sont corrects pour %s", file_path, flux_name)
+
+# Function to generate test results in JSON format
+def generate_test_results(failed_files, json_path):
+    # Ensure the REPORT_DIR directory exists
+    os.makedirs(os.path.dirname(json_path), exist_ok=True)
+    
+    test_results = []
+    for file_path, reason in failed_files:
+        result = {
+            "file_path": file_path,
+            "status": "Failed",
+            "reason": reason  # Reason no longer includes the file name
+        }
+        test_results.append(result)
+    
+    # Add passed files (optional, if you want to track all files)
+    for data_dir in DATA_DIRS:
+        if os.path.exists(data_dir):
+            for ent_folder in os.listdir(data_dir):
+                ent_path = os.path.join(data_dir, ent_folder)
+                if os.path.isdir(ent_path):
+                    for filename in os.listdir(ent_path):
+                        if filename.endswith(".csv"):
+                            file_path = os.path.join(ent_path, filename)
+                            if file_path not in [f[0] for f in failed_files]:
+                                test_results.append({
+                                    "file_path": file_path,
+                                    "status": "Passed",
+                                    "reason": None
+                                })
+    
+    # Save results to JSON file
+    with open(json_path, "w", encoding="utf-8") as json_file:
+        json.dump(test_results, json_file, indent=4, ensure_ascii=False)
+    logging.info("Rapport JSON généré : %s", json_path)
 
 # Traitement des fichiers
 failed_files = []
@@ -155,3 +181,6 @@ if failed_files:
 else:
     logging.info("\n🆗 Tous les fichiers ont passé les tests.")
     shutil.rmtree(REPORT_DIR, ignore_errors=True)
+
+# Generate JSON report for dashboard
+generate_test_results(failed_files, json_report_path)
