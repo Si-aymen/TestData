@@ -17,7 +17,7 @@ report_file_path = os.path.join(REPORT_DIR, "failure_report.txt")
 json_report_path = os.path.join(REPORT_DIR, "test_results.json")  # Path for JSON report
 
 # Load the Excel file
-excel_path = "Cahier des charges - Reporting Flux Standard - V25.1.0 1.xlsx"
+excel_path = "Cahier des charges - Reporting Flux Standard - V25.1.0 2.xlsx"
 while not os.path.exists(excel_path):
     excel_path = input("❌ Fichier introuvable. Veuillez entrer le chemin complet vers le fichier Excel : ")
 
