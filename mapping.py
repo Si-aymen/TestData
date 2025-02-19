@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 import json
-import re  # Ajout de l'import manquant
+import re  
 
 # Vérifier si le fichier existe avant de continuer
 file_path = "Cahier des charges - Reporting Flux Standard - V25.1.0 2.xlsx"
@@ -98,7 +98,7 @@ def get_entete_csv(df):
     try:
         values = []
         for value in df.iloc[4:, 2]:  # Parcours de la colonne C à partir de la ligne 5 (index 4)
-            if pd.isna(value) or value == "":  # Arrêter si la cellule est vide
+            if pd.isna(value) or value == "":  
                 break
             values.append(value)
         return values
