@@ -8,14 +8,17 @@ from mapping import extract_flux_sheet_names, flux_mapping, renamed_flux_sheets
 from Notice_ext import load_naming_constraints
 
 FILENAME_PATTERN = re.compile(
-    r'(?:(?:ENT-(?:[1-9]|[1-9][0-9]|100))_)?'
-    r'(?:MOD1_)?'
-    r'OCIANE_RC2_\d+_'
-    r'([A-Z_]+(?:_[A-Z_]+)*)'
-    r'_(Q|M)(?:_[A-Z_]+)?'
-    r'((?:_\d{8}){1,4})'
-    r'\.csv$'
+    r'(?:(?:ENT-(?:[1-9]|[1-9][0-9]|100))_)?'  # Optional ENT-1 to ENT-100
+    r'(?:MOD1_)?'  # Optional MOD1_ prefix
+    r'OCIANE_RC2_\d+_'  # Required OCIANE_RC2_X_ (X is one or more digits)
+    r'([A-Z_]+(?:_[A-Z_]+)*)'  # Flux name (uppercase letters and underscores)
+    r'_(Q|M)(?:_F)?'  # Period (_Q or _M) + optional _F
+    r'(_\d{8}(?:_\d{8})*|\d{16})'  # Dates: _YYYYMMDD or _YYYYMMDD_YYYYMMDD, or YYYYMMDDYYYYMMDD
+    r'\.csv$'  # Must end with .csv
 )
+
+
+
 
 TEST_DIR = "data"
 Q_DIR = os.path.join(TEST_DIR, "Q_FILES")
@@ -53,15 +56,17 @@ def find_failed_part(filename):
         (r'(?:MOD1_)?', "MOD1 prefix (optional)"),
         (r'OCIANE_RC2_\d+_', "OCIANE_RC2 with number"),
         (r'([A-Z_]+(?:_[A-Z_]+)*)', "Flux name"),
-        (r'_(Q|M)(?:_[A-Z_]+)?', "Period (_Q or _M)"),
-        (r'((?:_\d{8}){1,4})', "Dates (1 to 4 _YYYYMMDD)"),
+        (r'_(Q|M)(?:_F)?', "Period (_Q or _M)"),
+        (r'(_\d{8}(?:_\d{8})*|\d{16})', "Dates (1 to 4 _YYYYMMDD)"),
         (r'\.csv$', "File extension .csv")
     ]
     
     for part, desc in segments:
-        if not re.search(part, filename):
+        if not re.match(part, filename):  
             return desc
+    
     return "Unknown error"
+
 
 expected_date = None
 results = []

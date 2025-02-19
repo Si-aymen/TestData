@@ -24,12 +24,25 @@ RESULTS_FILE = os.path.join(NO_MATCH_DIR, "file_test_results.json")
 REPORT_DIR = "data/Mandatory_columns_failure"
 json_report_path = os.path.join(REPORT_DIR, "test_results.json")
 report_file_path = os.path.join(REPORT_DIR, "failure_report.txt")
+file_path = "Cahier des charges - Reporting Flux Standard - V25.1.0 2.xlsx"
+
 
 
 os.makedirs(Q_DIR, exist_ok=True)
 os.makedirs(M_DIR, exist_ok=True)
 os.makedirs(NO_MATCH_DIR, exist_ok=True)
 os.makedirs(REPORT_DIR, exist_ok=True)
+
+Notice_constraints = load_naming_constraints(file_path)
+Notice_name = set(Notice_constraints.values()) if isinstance(Notice_constraints, dict) else set(Notice_constraints)
+
+
+sheets = pd.read_excel(file_path, sheet_name=None)
+flux_sheets = extract_flux_sheet_names(sheets)  
+renamed_flux_sheets = {flux_mapping.get(flux, flux) for flux in flux_sheets}
+Notice_constraints = load_naming_constraints(file_path)
+Notice_name = set(Notice_constraints.values()) if isinstance(Notice_constraints, dict) else set(Notice_constraints)
+
 
 FILENAME_PATTERN = re.compile(
     r'(?:(?:ENT-(?:[1-9]|[1-9][0-9]|100))_)?'
