@@ -23,7 +23,7 @@ Q_DIR = os.path.join(TEST_DIR, "Q_FILES")
 M_DIR = os.path.join(TEST_DIR, "M_FILES")
 NO_MATCH_DIR = os.path.join(TEST_DIR, "NO_MATCH")
 RESULTS_FILE = os.path.join(NO_MATCH_DIR, "file_test_results.json")
-file_path = "Cahier des charges - Reporting Flux Standard - V25.1.0 2.xlsx"
+file_path = "Cahier des charges - Reporting Flux Standard - V25.1.0.xlsx"
 
 os.makedirs(Q_DIR, exist_ok=True)
 os.makedirs(M_DIR, exist_ok=True)

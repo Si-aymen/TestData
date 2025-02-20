@@ -24,28 +24,23 @@ RESULTS_FILE = os.path.join(NO_MATCH_DIR, "file_test_results.json")
 REPORT_DIR = "data/Mandatory_columns_failure"
 json_report_path = os.path.join(REPORT_DIR, "test_results.json")
 report_file_path = os.path.join(REPORT_DIR, "failure_report.txt")
-file_path = "Cahier des charges - Reporting Flux Standard - V25.1.0 2.xlsx"
+file_path = "Cahier des charges - Reporting Flux Standard - V25.1.0.xlsx"
 
-
-
+# Create directories if they don't exist
 os.makedirs(Q_DIR, exist_ok=True)
 os.makedirs(M_DIR, exist_ok=True)
 os.makedirs(NO_MATCH_DIR, exist_ok=True)
 os.makedirs(REPORT_DIR, exist_ok=True)
 
+# Load naming constraints and extract flux sheet names
 Notice_constraints = load_naming_constraints(file_path)
 Notice_name = set(Notice_constraints.values()) if isinstance(Notice_constraints, dict) else set(Notice_constraints)
-
 
 sheets = pd.read_excel(file_path, sheet_name=None)
-flux_sheets = extract_flux_sheet_names(sheets)  
+flux_sheets = extract_flux_sheet_names(sheets)
 renamed_flux_sheets = {flux_mapping.get(flux, flux) for flux in flux_sheets}
-Notice_constraints = load_naming_constraints(file_path)
-Notice_name = set(Notice_constraints.values()) if isinstance(Notice_constraints, dict) else set(Notice_constraints)
 
-
-import re
-
+# Regular expression for filename pattern
 FILENAME_PATTERN = re.compile(
     r'(?:(?:ENT-(?:[1-9]|[1-9][0-9]|100))_)?'  # Optional ENT-1 to ENT-100
     r'(?:MOD1_)?'  # Optional MOD1_ prefix
@@ -69,9 +64,8 @@ def extract_latest_date(dates_str):
     dates = [datetime.strptime(date, "%Y%m%d") for date in dates]
     return max(dates).strftime("%Y%m%d") if dates else None
 
-import re
 def find_failed_part(filename):
-    """Identifie la partie du nom de fichier qui ne correspond pas à la regex."""
+    """Identifies the part of the filename that does not match the regex."""
     segments = [
         (r'^(?:(?:ENT-(?:[1-9]|[1-9][0-9]|100))_)?', "ENT number (optional)"),
         (r'(?:MOD1_)?', "MOD1 prefix (optional)"),
@@ -84,7 +78,7 @@ def find_failed_part(filename):
     ]
 
     for part, desc in segments:
-        if not re.search(part, filename):  
+        if not re.search(part, filename):
             return desc
     
     return "Unknown error"
@@ -113,7 +107,7 @@ def classify_files():
         flux_name, period, first_date, *additional_dates = match.groups()
         flux_name = flux_name.strip()
         all_dates = [first_date] + [d for d in additional_dates if d]
-        latest_date = extract_latest_date("_".join(all_dates))  # Extraction correcte de la dernière date
+        latest_date = extract_latest_date("_".join(all_dates))
     
         if flux_name not in renamed_flux_sheets or flux_name not in Notice_name:
             shutil.move(file_path, os.path.join(NO_MATCH_DIR, filename))
@@ -149,7 +143,7 @@ def check_mandatory_columns_endpoint():
     failed_files = []
 
     # Load the Excel file
-    excel_path = "Cahier des charges - Reporting Flux Standard - V25.1.0 2.xlsx"
+    excel_path = "Cahier des charges - Reporting Flux Standard - V25.1.0.xlsx"
     while not os.path.exists(excel_path):
         excel_path = input("❌ Fichier introuvable. Veuillez entrer le chemin complet vers le fichier Excel : ")
 
@@ -183,16 +177,11 @@ def check_mandatory_columns_endpoint():
             for filename in os.listdir(ent_path):
                 if filename.endswith(".csv"):
                     file_path = os.path.join(ent_path, filename)
-
-                    # 🔍 Correction : Garder le fichier même sans correspondance
                     flux_name = next((flux for flux in org_flux_sheets if flux in filename.upper()), filename.upper())
-
                     logging.info(f"📂 flux_name utilisé : {flux_name}")
-
                     check_mandatory_columns(file_path, flux_name, mandatory_columns_by_flux, cahier_des_charges, failed_files)
 
     # Generate report
-    report_file_path = os.path.join(REPORT_DIR, "report.txt")  # Define report file path
     if failed_files:
         with open(report_file_path, "w", encoding="utf-8") as report_file:
             for file_path, reason in failed_files:
@@ -213,10 +202,10 @@ def check_mandatory_columns(file_path, flux_name, mandatory_columns_by_flux, cah
         df = pd.read_csv(file_path, sep=";", encoding="utf-8", low_memory=False)
         df.columns = df.columns.str.strip()
     except Exception as e:
-        error_message = f"Erreur lors de la lecture -> {e}"  # Remove file name from reason
+        error_message = f"Erreur lors de la lecture -> {e}"
         logging.error(f"{file_path} : {error_message}")
         failed_files.append((file_path, error_message))
-        shutil.move(file_path, os.path.join(REPORT_DIR, os.path.basename(file_path)))  # 🚨 Déplacement si échec
+        shutil.move(file_path, os.path.join(REPORT_DIR, os.path.basename(file_path)))
         return  
 
     if len(df) == 1:
@@ -231,10 +220,10 @@ def check_mandatory_columns(file_path, flux_name, mandatory_columns_by_flux, cah
     missing_columns = [col for col in mandatory_columns if col not in df.columns]
     
     if missing_columns:
-        error_message = f"Colonnes manquantes pour {flux_name} -> {missing_columns}"  # Remove file name from reason
+        error_message = f"Colonnes manquantes pour {flux_name} -> {missing_columns}"
         logging.error(f"{file_path} : {error_message}")
         failed_files.append((file_path, error_message))
-        shutil.move(file_path, os.path.join(REPORT_DIR, os.path.basename(file_path)))  # 🚨 Déplacement si échec
+        shutil.move(file_path, os.path.join(REPORT_DIR, os.path.basename(file_path)))
         return
 
     headers_types = extract_headers_and_types(cahier_des_charges[flux_name])
@@ -252,48 +241,33 @@ def check_mandatory_columns(file_path, flux_name, mandatory_columns_by_flux, cah
                 if any(actual_values.str.len() > max_allowed_length):
                     length_check_failed.append(f"{header} (Attendu max: {max_allowed_length}, Trouvé: {actual_values.str.len().max()})")
 
-            # 🔹 Vérification du type
+            # Check type
             if expected_type == "Numérique":
-                try:
-                    df[header] = pd.to_numeric(df[header], errors='coerce')
-                    if df[header].isna().any():
-                        type_check_failed.append(f"{header} : Attendu 'Numérique', trouvé des valeurs non numériques.")
-                except Exception:
-                    type_check_failed.append(f"{header} : Erreur de conversion en numérique.")
-            if expected_type == "Numérique":
-                df[header] = df[header].astype(str).str.strip()  # Supprimer les espaces
-                df[header] = df[header].replace(['nan', 'NaN', 'None', '-', 'NULL'], pd.NA)  # Standardiser les valeurs non numériques
-                df[header] = df[header].fillna(0)  # Remplacer NaN par 0 pour éviter les erreurs
-                df[header] = df[header].str.replace(',', '.', regex=False)  # Convertir virgules en points (si besoin)
-
-                df[header] = pd.to_numeric(df[header], errors='coerce')  # Convertir en nombre, les erreurs deviennent NaN
+                df[header] = df[header].astype(str).str.strip()
+                df[header] = df[header].replace(['nan', 'NaN', 'None', '-', 'NULL'], pd.NA)
+                df[header] = df[header].fillna(0)
+                df[header] = df[header].str.replace(',', '.', regex=False)
+                df[header] = pd.to_numeric(df[header], errors='coerce')
 
                 if df[header].isna().any():
                     invalid_numbers = df[df[header].isna()][header].unique()
                     type_check_failed.append(f"{header} : Attendu 'Numérique', trouvé des valeurs non numériques. Valeurs problématiques: {invalid_numbers}")
 
+        if length_check_failed or type_check_failed:
+            error_message = f"Erreurs -> Longueur: {', '.join(length_check_failed)}, Type: {', '.join(type_check_failed)}"
+            logging.error(f"{file_path} : {error_message}")
+            failed_files.append((file_path, error_message))
+            shutil.move(file_path, os.path.join(REPORT_DIR, os.path.basename(file_path)))
 
-
-
-    # Combine checks
-    if length_check_failed or type_check_failed:
-        error_message = f"Erreurs -> Longueur: {', '.join(length_check_failed)}, Type: {', '.join(type_check_failed)}"  # Remove file name from reason
-        logging.error(f"{file_path} : {error_message}")
-        failed_files.append((file_path, error_message))
-        shutil.move(file_path, os.path.join(REPORT_DIR, os.path.basename(file_path)))  # 🚨 Déplacement si échec
-
-        # Add failure details to the failure report
-        with open(report_file_path, "a", encoding="utf-8") as report_file:
-            report_file.write(f"❌ {file_path}\n")
-            report_file.write(f"Raison : Longueur -> {', '.join(length_check_failed)}\n")
-            report_file.write(f"Raison : Type -> {', '.join(type_check_failed)}\n\n")
-        
-    else:
-        logging.info("%s \n🆗 : Toutes les colonnes obligatoires, leurs longueurs et types sont corrects pour %s", file_path, flux_name)
-
+            with open(report_file_path, "a", encoding="utf-8") as report_file:
+                report_file.write(f"❌ {file_path}\n")
+                report_file.write(f"Raison : Longueur -> {', '.join(length_check_failed)}\n")
+                report_file.write(f"Raison : Type -> {', '.join(type_check_failed)}\n\n")
+            
+        else:
+            logging.info("%s \n🆗 : Toutes les colonnes obligatoires, leurs longueurs et types sont corrects pour %s", file_path, flux_name)
 
 def generate_test_results(failed_files, json_path):
-    # Ensure the REPORT_DIR directory exists
     os.makedirs(os.path.dirname(json_path), exist_ok=True)
     
     test_results = []
@@ -301,11 +275,10 @@ def generate_test_results(failed_files, json_path):
         result = {
             "file_path": file_path,
             "status": "Failed",
-            "reason": reason  # Reason no longer includes the file name
+            "reason": reason
         }
         test_results.append(result)
     
-    # Add passed files (optional, if you want to track all files)
     for data_dir in DATA_DIRS:
         if os.path.exists(data_dir):
             for ent_folder in os.listdir(data_dir):
@@ -321,7 +294,6 @@ def generate_test_results(failed_files, json_path):
                                     "reason": None
                                 })
     
-    # Save results to JSON file
     with open(json_path, "w", encoding="utf-8") as json_file:
         json.dump(test_results, json_file, indent=4, ensure_ascii=False)
     logging.info("Rapport JSON généré : %s", json_path)

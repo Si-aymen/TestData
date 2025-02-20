@@ -17,7 +17,7 @@ report_file_path = os.path.join(REPORT_DIR, "failure_report.txt")
 json_report_path = os.path.join(REPORT_DIR, "test_results.json")
 
 # 🔹 Chargement du fichier Excel
-excel_path = "Cahier des charges - Reporting Flux Standard - V25.1.0 2.xlsx"
+excel_path = "Cahier des charges - Reporting Flux Standard - V25.1.0.xlsx"
 while not os.path.exists(excel_path):
     excel_path = input("❌ Fichier introuvable. Veuillez entrer le chemin complet vers le fichier Excel : ")
 
@@ -71,16 +71,17 @@ def check_mandatory_columns(file_path, flux_name, failed_files):
         if pd.notna(expected_length) and isinstance(expected_length, (int, float)):
             max_allowed_length = 10 if expected_length == 8 else int(expected_length)
             if any(actual_values.str.len() > max_allowed_length):
-                length_check_failed.append(f"{header} (Max: {max_allowed_length}, Trouvé: {actual_values.str.len().max()})")
+                length_check_failed.append(f"{header} (Max: {max_allowed_length}, Trouvé: {actual_values.str.len().max()})\n")
 
         # 🔹 Vérification du type
         if expected_type == "Numérique":
-            if not all(actual_values.isna() | actual_values.str.match(r'^\d+$', na=True)):
+            if not all(actual_values.isna() | actual_values.astype(str).str.match(r'^\d+$', na=True)):
                 type_check_failed.append(f"{header} : Attendu 'Numérique', trouvé des valeurs non numériques.")
 
         elif expected_type == "Date aaaammjj":
-            if not all(actual_values.isna() | actual_values.str.match(r'^\d{8}$', na=True)):
+            if not all(actual_values.isna() | actual_values.astype(str).str.match(r'^\d{8}$', na=True)):
                 type_check_failed.append(f"{header} : Attendu 'Date aaaammjj', format incorrect.")
+
 
     # 🔹 Enregistrement des erreurs
     if length_check_failed or type_check_failed:
