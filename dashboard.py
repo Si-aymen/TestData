@@ -63,7 +63,7 @@ pie_chart = px.pie(
     names="status",
     title="Proportion of Passed vs. Failed Files",
     hole=0.3,
-    color_discrete_sequence=["green", "red"],
+    color_discrete_sequence=["darkblue", "grey"],
 )
 
 # Initialize Dash app

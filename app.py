@@ -44,14 +44,16 @@ Notice_constraints = load_naming_constraints(file_path)
 Notice_name = set(Notice_constraints.values()) if isinstance(Notice_constraints, dict) else set(Notice_constraints)
 
 
+import re
+
 FILENAME_PATTERN = re.compile(
-    r'(?:(?:ENT-(?:[1-9]|[1-9][0-9]|100))_)?'
-    r'(?:MOD1_)?'
-    r'OCIANE_RC2_\d+_'
-    r'([A-Z_]+(?:_[A-Z_]+)*)'
-    r'_(Q|M)(?:_[A-Z_]+)?'
-    r'((?:_\d{8}){1,4})'
-    r'\.csv$'
+    r'(?:(?:ENT-(?:[1-9]|[1-9][0-9]|100))_)?'  # Optional ENT-1 to ENT-100
+    r'(?:MOD1_)?'  # Optional MOD1_ prefix
+    r'OCIANE_RC2_\d+_'  # Required OCIANE_RC2_X_
+    r'([A-Z_]+(?:_[A-Z_]+)*)'  # Flux name
+    r'_(Q|M)(?:_F)?'  # Period (_Q or _M) + optional _F
+    r'_(\d{8}(?:\d{8})?)(?:_(\d{8}))*'  # Dates (YYYYMMDD, YYYYMMDDYYYYMMDD, or multiple)
+    r'\.csv$'  # Must end with .csv
 )
 
 def get_ent_number(filename):
@@ -67,20 +69,24 @@ def extract_latest_date(dates_str):
     dates = [datetime.strptime(date, "%Y%m%d") for date in dates]
     return max(dates).strftime("%Y%m%d") if dates else None
 
+import re
 def find_failed_part(filename):
+    """Identifie la partie du nom de fichier qui ne correspond pas à la regex."""
     segments = [
-        (r'(?:(?:ENT-(?:[1-9]|[1-9][0-9]|100))_)?', "ENT number (optional)"),
+        (r'^(?:(?:ENT-(?:[1-9]|[1-9][0-9]|100))_)?', "ENT number (optional)"),
         (r'(?:MOD1_)?', "MOD1 prefix (optional)"),
         (r'OCIANE_RC2_\d+_', "OCIANE_RC2 with number"),
         (r'([A-Z_]+(?:_[A-Z_]+)*)', "Flux name"),
-        (r'_(Q|M)(?:_[A-Z_]+)?', "Period (_Q or _M)"),
-        (r'((?:_\d{8}){1,4})', "Dates (1 to 4 _YYYYMMDD)"),
+        (r'_(Q|M)(?:_F)?', "Period (_Q or _M)"),
+        (r'_(\d{8}(?:\d{8})?)', "First date (YYYYMMDD or YYYYMMDDYYYYMMDD)"),
+        (r'(?:_(\d{8}))*', "Additional dates (_YYYYMMDD, optional)"),
         (r'\.csv$', "File extension .csv")
     ]
-    
+
     for part, desc in segments:
-        if not re.search(part, filename):
+        if not re.search(part, filename):  
             return desc
+    
     return "Unknown error"
 
 @app.route('/classify_files', methods=['POST'])
@@ -103,11 +109,12 @@ def classify_files():
             result["reason"] = "Filename does not match the pattern."
             results.append(result)
             continue
-        
-        flux_name, period, dates_str = match.groups()
+    
+        flux_name, period, first_date, *additional_dates = match.groups()
         flux_name = flux_name.strip()
-        latest_date = extract_latest_date(dates_str)
-        
+        all_dates = [first_date] + [d for d in additional_dates if d]
+        latest_date = extract_latest_date("_".join(all_dates))  # Extraction correcte de la dernière date
+    
         if flux_name not in renamed_flux_sheets or flux_name not in Notice_name:
             shutil.move(file_path, os.path.join(NO_MATCH_DIR, filename))
             result["status"] = "Failed"
@@ -245,21 +252,29 @@ def check_mandatory_columns(file_path, flux_name, mandatory_columns_by_flux, cah
                 if any(actual_values.str.len() > max_allowed_length):
                     length_check_failed.append(f"{header} (Attendu max: {max_allowed_length}, Trouvé: {actual_values.str.len().max()})")
 
-            # Check type
+            # 🔹 Vérification du type
             if expected_type == "Numérique":
-                if not all(actual_values.isnull() | actual_values.str.isnumeric()):
-                    type_check_failed.append(f"{header} : Attendu 'Numérique', trouvé des valeurs non numériques.")
-            elif expected_type in ["Alphanumérique", "Alpha Numérique"]:
-                # Updated regex to allow spaces, commas, and percentage signs
-                alphanumeric_pattern = re.compile(r'^[a-zA-Z0-9 ,%]+$')  # Allows letters, numbers, spaces, commas, and %
-                if not all(actual_values.str.match(alphanumeric_pattern)):
-                    type_check_failed.append(f"{header} : Attendu 'Alphanumérique', trouvé des valeurs non alphanumériques.")
-            elif expected_type == "Date aaaammjj":
                 try:
-                    pd.to_datetime(actual_values, format='%Y%m%d', errors='raise')
+                    df[header] = pd.to_numeric(df[header], errors='coerce')
+                    if df[header].isna().any():
+                        type_check_failed.append(f"{header} : Attendu 'Numérique', trouvé des valeurs non numériques.")
                 except Exception:
-                    type_check_failed.append(f"{header} : Attendu 'Date aaaammjj', format incorrect pour certaines valeurs.")
-    
+                    type_check_failed.append(f"{header} : Erreur de conversion en numérique.")
+            if expected_type == "Numérique":
+                df[header] = df[header].astype(str).str.strip()  # Supprimer les espaces
+                df[header] = df[header].replace(['nan', 'NaN', 'None', '-', 'NULL'], pd.NA)  # Standardiser les valeurs non numériques
+                df[header] = df[header].fillna(0)  # Remplacer NaN par 0 pour éviter les erreurs
+                df[header] = df[header].str.replace(',', '.', regex=False)  # Convertir virgules en points (si besoin)
+
+                df[header] = pd.to_numeric(df[header], errors='coerce')  # Convertir en nombre, les erreurs deviennent NaN
+
+                if df[header].isna().any():
+                    invalid_numbers = df[df[header].isna()][header].unique()
+                    type_check_failed.append(f"{header} : Attendu 'Numérique', trouvé des valeurs non numériques. Valeurs problématiques: {invalid_numbers}")
+
+
+
+
     # Combine checks
     if length_check_failed or type_check_failed:
         error_message = f"Erreurs -> Longueur: {', '.join(length_check_failed)}, Type: {', '.join(type_check_failed)}"  # Remove file name from reason
